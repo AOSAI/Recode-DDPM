@@ -1,39 +1,26 @@
 import torch
+import torch.nn as nn
 import numpy as np
-from .nosie_schedule import get_noise_schedule
+from .noise_schedule import get_noise_schedule
 from .utils import ModelMeanType, ModelVarType, LossType, extract
 
 class GaussianDiffusion:
-    def __init__(self, betas, model, loss_type="l2", timesteps=1000, device="cuda"):
+    def __init__(self, model, model_mean_type, model_var_type, loss_type, 
+                 timesteps=1000, device="cuda"):
         # 保存参数
         self.model = model
+        self.model_mean_type = model_mean_type
+        self.model_var_type = model_var_type
         self.loss_type = loss_type
         self.timesteps = timesteps
         self.device = device
 
         # 获取所有噪声调度参数
-        noise_schedule = get_noise_schedule(betas)
+        noise_schedule = get_noise_schedule(timesteps)
         # 将所有参数注册为 self.xxx，并转移到 device 上
         for k, v in noise_schedule.items():
-            setattr(self, k, v.to(device))
+            setattr(self, k, v)
 
-        # 后验方差
-        self.posterior_variance = (
-            betas * (1.0 - self.alphas_cumprod_prev) / (1.0 - self.alphas_cumprod)
-        )
-        # 后验对数方差。由于扩散链开始时的后验方差为 0，因此对数计算被剪切。
-        self.posterior_log_variance_clipped = np.log(
-            np.append(self.posterior_variance[1], self.posterior_variance[1:])
-        )
-        # 均值的两个系数
-        self.posterior_mean_coef1 = (
-            betas * np.sqrt(self.alphas_cumprod_prev) / (1.0 - self.alphas_cumprod)
-        )
-        self.posterior_mean_coef2 = (
-            (1.0 - self.alphas_cumprod_prev)
-            * np.sqrt(self.alphas)
-            / (1.0 - self.alphas_cumprod)
-        )
 
     def q_sample(self, x_start, t, noise=None):
         """从原始图像添加噪声, 模拟前向扩散过程的采样"""
@@ -104,10 +91,24 @@ class GaussianDiffusion:
 
         return x_t
 
-    def sample(self, shape):
+    def sample(self, model, image_size, batch_size=16):
         # 外部调用入口，封装 p_sample_loop
-        pass
-
-    def p_losses(self, x_start, t, noise=None):
+        shape = (batch_size, 3, image_size, image_size)
+        return self.p_sample_loop(model, shape)
+    
+    def p_losses(self, model, x_start, t, noise=None):
         # 损失函数，预测 noise 或 x_0 的误差
-        pass
+        if self.loss_type == LossType.MSE:
+            self.loss_fn = nn.MSELoss()
+        else:
+            raise NotImplementedError("Only MSE loss is supported for now.")
+        
+        if noise is None:
+            noise = torch.randn_like(x_start)
+        # 加噪音得到 x_t
+        x_t = self.q_sample(x_start, t, noise)
+        # 模型预测噪音
+        predicted_noise = model(x_t, t)
+
+        # 计算损失
+        return self.loss_fn(predicted_noise, noise)

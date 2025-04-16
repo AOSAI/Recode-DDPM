@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+from .utils import timestep_embedding
 
 
 class ResidualBlock(nn.Module):
@@ -47,9 +47,11 @@ class Upsample(nn.Module):
 
 
 class SimpleUNet(nn.Module):
-    def __init__(self, in_channels=3, out_channels=3, base_channels=128, 
+    def __init__(self, in_channels=3, out_channels=3, base_channels=64, 
                  channel_mults=(1, 2, 4), num_res_blocks=2):
         super().__init__()
+
+        self.base_channels = base_channels
 
         time_emb_dim = base_channels * 4
         self.time_embedding = nn.Sequential(
@@ -64,8 +66,9 @@ class SimpleUNet(nn.Module):
         self.down_blocks = nn.ModuleList()
         ch = base_channels
         for mult in channel_mults:
+            out_ch = mult * base_channels
             for _ in range(num_res_blocks):
-                self.down_blocks.append(ResidualBlock(ch, mult * base_channels, time_emb_dim))
+                self.down_blocks.append(ResidualBlock(ch, out_ch, time_emb_dim))
                 ch = mult * base_channels
             self.down_blocks.append(Downsample(ch))
 
@@ -76,8 +79,9 @@ class SimpleUNet(nn.Module):
         # Upsampling
         self.up_blocks = nn.ModuleList()
         for mult in reversed(channel_mults):
+            out_ch = mult * base_channels
             for _ in range(num_res_blocks):
-                self.up_blocks.append(ResidualBlock(ch * 2, base_channels * mult, time_emb_dim))
+                self.up_blocks.append(ResidualBlock(ch * 2, out_ch, time_emb_dim))
                 ch = base_channels * mult
             self.up_blocks.append(Upsample(ch))
 
@@ -88,7 +92,9 @@ class SimpleUNet(nn.Module):
         )
 
     def forward(self, x, t):
-        t_emb = self.time_embedding(t)
+        t_emb = timestep_embedding(t, self.base_channels)
+        t_emb = self.time_embedding(t_emb)
+
         h = self.input_conv(x)
         hs = [h]
 

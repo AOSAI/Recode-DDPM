@@ -8,7 +8,7 @@ def linear_beta_schedule(timesteps):
     scale = 1000 / timesteps
     beta_start = scale * 0.0001
     beta_end = scale * 0.02
-    return torch.linspace(beta_start, beta_end, timesteps)
+    return np.linspace(beta_start, beta_end, timesteps)
 
 def get_noise_schedule(timesteps):
     """
@@ -23,6 +23,22 @@ def get_noise_schedule(timesteps):
     alphas_cumprod_prev = np.append(1.0, alphas_cumprod[:-1])
     alphas_cumprod_next = np.append(alphas_cumprod[1:], 0.0)
 
+    # 后验方差
+    posterior_variance = (
+        betas * (1.0 - alphas_cumprod_prev) / (1.0 - alphas_cumprod)
+    )
+    # 后验对数方差。由于扩散链开始时的后验方差为 0，因此对数计算被剪切。
+    posterior_log_variance_clipped = np.log(
+        np.append(posterior_variance[1], posterior_variance[1:])
+    )
+    # 均值的两个系数
+    posterior_mean_coef1 = (
+        betas * np.sqrt(alphas_cumprod_prev) / (1.0 - alphas_cumprod)
+    )
+    posterior_mean_coef2 = (
+        (1.0 - alphas_cumprod_prev) * np.sqrt(alphas) / (1.0 - alphas_cumprod)
+    )
+
     return {
         "betas": betas,
         "alphas": alphas,
@@ -34,4 +50,8 @@ def get_noise_schedule(timesteps):
         "log_one_minus_alphas_cumprod": np.log(1.0 - alphas_cumprod),
         "sqrt_recip_alphas_cumprod": np.sqrt(1.0 / alphas_cumprod),
         "sqrt_recipm1_alphas_cumprod": np.sqrt(1.0 / alphas_cumprod - 1),
+        "posterior_variance": posterior_variance,
+        "posterior_log_variance_clipped": posterior_log_variance_clipped,
+        "posterior_mean_coef1": posterior_mean_coef1,
+        "posterior_mean_coef2": posterior_mean_coef2,
     }

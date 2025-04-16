@@ -1,4 +1,5 @@
 import torch as th
+import numpy as np
 from enum import Enum
 
 class ModelMeanType(Enum):
