@@ -12,14 +12,13 @@ from ddpm.utils import ModelMeanType, ModelVarType, LossType
 
 def main():
     # ----------- 1. 配置参数 -----------
-    epochs = 10
-    batch_size = 64
+    epochs = 20
+    batch_size = 128
     image_size = 32
     learning_rate = 1e-4
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    # device = torch.device('mps' if (torch.backends.mps.is_available()) else 'cpu')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    save_dir = "./datasets/results"
+    save_dir = "./datasets/results1"
     os.makedirs(save_dir, exist_ok=True)
 
     # ----------- 2. 加载数据集 -----------
@@ -30,7 +29,7 @@ def main():
     ])
 
     dataset = datasets.CIFAR10(root="./datasets/cifar10", train=True, download=True, transform=transform)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=2)
 
     # ----------- 3. 初始化模型和 Diffusion -----------
     model = SimpleUNet().to(device)
@@ -49,12 +48,10 @@ def main():
 
     # ----------- 4. 训练主循环 -----------
     for epoch in range(epochs):
-        pbar = tqdm(dataloader)
+        pbar = tqdm(dataloader, dynamic_ncols=True)
         for i, (x, _) in enumerate(pbar):
             x = x.to(device)
-
             t = torch.randint(0, diffusion.timesteps, (x.size(0),), device=device).long()
-
             loss = diffusion.p_losses(model, x, t)
 
             optimizer.zero_grad()
@@ -62,13 +59,14 @@ def main():
             optimizer.step()
 
             pbar.set_description(f"Epoch {epoch+1} Loss: {loss.item():.4f}")
+            pbar.set_postfix(Loss=loss.item(), refresh=True)
 
         # ----------- 5. 每个 epoch 保存采样图像 -----------
-        sampled_images = diffusion.sample(model=model, batch_size=16)
+        sampled_images = diffusion.sample(model=model, image_size=image_size, batch_size=32)
         utils.save_image(sampled_images, f"{save_dir}/sample_epoch_{epoch+1}.png", normalize=True)
 
-        # 保存模型
-        torch.save(model.state_dict(), f"{save_dir}/model_epoch_{epoch+1}.pt")
+        if epoch % 4 == 0:
+            torch.save(model.state_dict(), f"{save_dir}/model_epoch_{epoch+1}.pt")
 
 if __name__ == '__main__':
     main()

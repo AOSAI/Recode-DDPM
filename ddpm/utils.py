@@ -24,7 +24,7 @@ def extract(arr, timesteps, broadcast_shape):
     :param broadcast_shape: 用于广播的目标形状（如 [B, 1, 1, 1]）。
     :return: 已广播的张量, shape 为 broadcast_shape。
     """
-    res = th.from_numpy(arr).to(device=timesteps.device)[timesteps].float()
+    res = arr.to(device=timesteps.device)[timesteps].float()
     while len(res.shape) < len(broadcast_shape):
         res = res[..., None]
     return res.expand(broadcast_shape)

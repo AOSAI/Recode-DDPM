@@ -50,6 +50,7 @@ class SimpleUNet(nn.Module):
     def __init__(self, in_channels=3, out_channels=3, base_channels=64, 
                  channel_mults=(1, 2, 4), num_res_blocks=2):
         super().__init__()
+        # print("✅ UNet initialized successfully!")
 
         self.base_channels = base_channels
 
@@ -64,13 +65,16 @@ class SimpleUNet(nn.Module):
 
         # Downsampling
         self.down_blocks = nn.ModuleList()
+        skip_channels = []
         ch = base_channels
-        for mult in channel_mults:
+        for level, mult in enumerate(channel_mults):
             out_ch = mult * base_channels
             for _ in range(num_res_blocks):
                 self.down_blocks.append(ResidualBlock(ch, out_ch, time_emb_dim))
-                ch = mult * base_channels
-            self.down_blocks.append(Downsample(ch))
+                skip_channels.append(out_ch)
+                ch = out_ch
+            if level != len(channel_mults) - 1:
+                self.down_blocks.append(Downsample(ch))
 
         # Middle
         self.middle_block1 = ResidualBlock(ch, ch, time_emb_dim)
@@ -78,12 +82,18 @@ class SimpleUNet(nn.Module):
 
         # Upsampling
         self.up_blocks = nn.ModuleList()
-        for mult in reversed(channel_mults):
+        for level, mult in list(enumerate(channel_mults))[::-1]:
             out_ch = mult * base_channels
-            for _ in range(num_res_blocks):
-                self.up_blocks.append(ResidualBlock(ch * 2, out_ch, time_emb_dim))
-                ch = base_channels * mult
-            self.up_blocks.append(Upsample(ch))
+            for i in range(num_res_blocks + 1):
+                if i == num_res_blocks:
+                    if level != 0:
+                        self.up_blocks.append(Upsample(ch))
+                    break
+
+                self.up_blocks.append(
+                    ResidualBlock(ch+skip_channels.pop(), out_ch, time_emb_dim)
+                )
+                ch = out_ch
 
         self.output_conv = nn.Sequential(
             nn.GroupNorm(32, ch),
@@ -92,15 +102,19 @@ class SimpleUNet(nn.Module):
         )
 
     def forward(self, x, t):
-        t_emb = timestep_embedding(t, self.base_channels)
+        # print("🔥 Forward started...")
+        t_emb = timestep_embedding(t, self.base_channels).to(x.device)
         t_emb = self.time_embedding(t_emb)
 
         h = self.input_conv(x)
         hs = [h]
-
+        
         for module in self.down_blocks:
-            h = module(h, t_emb) if isinstance(module, ResidualBlock) else module(h)
-            hs.append(h)
+            if isinstance(module, ResidualBlock):
+                h = module(h, t_emb) 
+                hs.append(h)
+            else: 
+                h = module(h)
 
         h = self.middle_block1(h, t_emb)
         h = self.middle_block2(h, t_emb)

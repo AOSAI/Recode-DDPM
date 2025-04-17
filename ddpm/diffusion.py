@@ -19,7 +19,7 @@ class GaussianDiffusion:
         noise_schedule = get_noise_schedule(timesteps)
         # 将所有参数注册为 self.xxx，并转移到 device 上
         for k, v in noise_schedule.items():
-            setattr(self, k, v)
+            setattr(self, k, torch.from_numpy(v).to(device))
 
 
     def q_sample(self, x_start, t, noise=None):
@@ -43,6 +43,12 @@ class GaussianDiffusion:
         posterior_log_variance = extract(self.posterior_log_variance_clipped, t, x_t.shape)
         
         return posterior_mean, posterior_variance, posterior_log_variance
+    
+    def predict_start_from_noise(self, x_t, t, noise):
+        return (
+            extract(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t -
+            extract(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape) * noise
+        )
 
     def p_sample(self, model, x_t, t):
         """
@@ -64,7 +70,7 @@ class GaussianDiffusion:
         x_0_pred = self.predict_start_from_noise(x_t, t, eps_theta)
 
         # 计算后验分布的均值和方差
-        mean, _, log_variance = self.q_posterior_mean_variance(x_start=x_0_pred, x_t=x_t, t=t)
+        mean, _, log_variance = self.q_posterior(x_0_pred, x_t, t)
 
         # 从 N(mean, var) 中采样一个 x_{t-1}
         noise = torch.randn_like(x_t)
@@ -85,16 +91,18 @@ class GaussianDiffusion:
         """
         x_t = torch.randn(shape, device=device)
 
-        for i in reversed(range(self.num_timesteps)):
-            t = torch.full((shape[0],), i, device=device, dtype=torch.long)
-            x_t = self.p_sample(model, x_t, t)
+        with torch.no_grad():
+            for i in reversed(range(self.timesteps)):
+                t = torch.full((shape[0],), i, device=device, dtype=torch.long)
+                x_t = self.p_sample(model, x_t, t)
 
         return x_t
 
     def sample(self, model, image_size, batch_size=16):
         # 外部调用入口，封装 p_sample_loop
         shape = (batch_size, 3, image_size, image_size)
-        return self.p_sample_loop(model, shape)
+        device = next(model.parameters()).device  # 👈 自动获取模型所在设备
+        return self.p_sample_loop(model, shape, device)
     
     def p_losses(self, model, x_start, t, noise=None):
         # 损失函数，预测 noise 或 x_0 的误差
@@ -103,6 +111,7 @@ class GaussianDiffusion:
         else:
             raise NotImplementedError("Only MSE loss is supported for now.")
         
+        t = t.to(x_start.device)
         if noise is None:
             noise = torch.randn_like(x_start)
         # 加噪音得到 x_t
