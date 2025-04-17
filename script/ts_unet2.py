@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 import os
 
-from models.Unet import SimpleUNet
+from models.Unet1 import SimpleUNet
 from ddpm.diffusion import GaussianDiffusion
 from ddpm.utils import ModelMeanType, ModelVarType, LossType
 
