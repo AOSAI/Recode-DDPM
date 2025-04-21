@@ -12,12 +12,12 @@ from ddpm.utils import ModelMeanType, ModelVarType, LossType
 
 def main():
     # ----------- 1. 配置参数 -----------
-    epochs = 100
+    epochs = 50
     batch_size = 64
     image_size = 32
     learning_rate = 1e-4
-    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    device = torch.device('mps' if (torch.backends.mps.is_available()) else 'cpu')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    # device = torch.device('mps' if (torch.backends.mps.is_available()) else 'cpu')
 
     save_dir = "./output/ts_1"
     os.makedirs(save_dir, exist_ok=True)
@@ -26,7 +26,7 @@ def main():
     transform = transforms.Compose([
         transforms.Resize(image_size),
         transforms.ToTensor(),
-        transforms.Normalize([0.5], [0.5]),
+        transforms.Normalize(mean=[0.5]*3, std=[0.5]*3),
     ])
 
     dataset = datasets.CIFAR10(root="./public/cifar10", train=True, download=True, transform=transform)
@@ -63,11 +63,11 @@ def main():
             pbar.set_postfix(Loss=loss.item(), refresh=True)
 
         # ----------- 5. 每个 epoch 保存采样图像 -----------
-        sampled_images = diffusion.sample(model=model, image_size=image_size, batch_size=8)
-        utils.save_image(sampled_images, f"{save_dir}/sample_epoch_{epoch}.png", normalize=True)
+        sampled_images = diffusion.sample(model=model, image_size=image_size, batch_size=16)
+        utils.save_image(sampled_images, f"{save_dir}/sample_epoch_{epoch+1}.png", normalize=True)
 
         if epoch == 0 or (epoch + 1) % 5 == 0:
-            torch.save(model.state_dict(), f"{save_dir}/model_epoch_{epoch}.pt")
+            torch.save(model.state_dict(), f"{save_dir}/model_epoch_{epoch+1}.pt")
 
 if __name__ == '__main__':
     main()

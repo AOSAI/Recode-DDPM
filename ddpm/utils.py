@@ -3,15 +3,18 @@ import numpy as np
 from enum import Enum
 
 class ModelMeanType(Enum):
+    """决定模型预测的内容是什么，用于训练"""
     PREVIOUS_X = "prev_x"   # 预测 x_{t-1}
     START_X = "x0"          # 预测 x_0
     EPSILON = "eps"         # 预测噪声 epsilon
 
 class ModelVarType(Enum):
+    """决定反向过程中协方差的计算方式，用于采样而非训练"""
     FIXED_SMALL = "fixed_small"
     FIXED_LARGE = "fixed_large"
 
 class LossType(Enum):
+    """模型的损失计算方式"""
     MSE = "mse"     # 原始的 MSE 损失
     def is_vb(self): return False
 

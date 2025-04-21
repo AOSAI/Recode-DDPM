@@ -2,3 +2,4 @@ ddpm/__pycache__/
 ddpm_old/__pycache__/
 models/__pycache__/
 public/cifar10/
+output/
